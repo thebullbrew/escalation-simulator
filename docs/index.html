@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escalator — Bid-War Simulator</title>
+<meta name="description" content="Monte Carlo simulator for homebuyers writing escalation-clause offers in multi-offer bidding wars.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F3522">
+<link rel="icon" type="image/png" href="icons/icon-32.png">
+<style>
+:root{
+  --green:#1F3522; --ivory:#F5F2E8; --gold:#B49A5B;
+  --oxblood:#5C2A2A; --charcoal:#2C2C2C;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--charcoal);color:var(--ivory);
+  font-family:Georgia,'Times New Roman',serif;line-height:1.5}
+.wrap{max-width:920px;margin:0 auto;padding:0 16px 48px}
+header.brand{background:var(--green);border-bottom:3px solid var(--gold);padding:26px 16px;text-align:center}
+header.brand h1{margin:0;font-size:1.9rem;letter-spacing:.06em;color:var(--gold);font-variant:small-caps}
+header.brand p{margin:6px 0 0;color:var(--ivory);opacity:.85;font-style:italic}
+.card{background:#383838;border:1px solid #4a4a4a;border-radius:10px;
+  padding:18px;margin:18px 0;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.card h2{margin:0 0 10px;color:var(--gold);font-size:1.25rem;font-variant:small-caps;letter-spacing:.04em}
+.card h2 .num{display:inline-block;background:var(--gold);color:var(--charcoal);border-radius:50%;
+  width:1.5em;height:1.5em;text-align:center;line-height:1.5em;margin-right:.4em;font-size:.85em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:.85rem;color:var(--gold);margin-bottom:4px;letter-spacing:.02em}
+input[type=number],input[type=text]{width:100%;background:#242424;color:var(--ivory);
+  border:1px solid #5a5a5a;border-radius:6px;padding:10px;font-size:1rem;font-family:inherit}
+input:focus{border-color:var(--gold);outline:none}
+.hint{font-size:.78rem;opacity:.65;margin-top:4px}
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.seg button{background:#242424;color:var(--ivory);border:1px solid #5a5a5a;border-radius:6px;
+  padding:8px 14px;font-family:inherit;font-size:.95rem;cursor:pointer}
+.seg button.on{background:var(--gold);color:var(--charcoal);border-color:var(--gold);font-weight:bold}
+button.big{background:var(--gold);color:var(--charcoal);border:none;border-radius:8px;
+  padding:14px 28px;font-size:1.15rem;font-weight:bold;font-family:inherit;cursor:pointer;
+  display:block;width:100%;margin:18px 0 4px;letter-spacing:.03em}
+button.big:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;color:var(--gold);border:1px solid var(--gold);
+  border-radius:6px;padding:9px 16px;font-family:inherit;cursor:pointer;font-size:.95rem}
+.verdict{font-size:1.3rem;line-height:1.6}
+.bigpct{font-size:3.2rem;font-weight:bold;color:var(--gold);display:block;line-height:1.1}
+.stat{display:inline-block;background:#242424;border:1px solid #4a4a4a;border-radius:8px;
+  padding:10px 16px;margin:8px 8px 0 0;min-width:150px}
+.stat .k{font-size:.78rem;color:var(--gold);display:block}
+.stat .v{font-size:1.35rem;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:.95rem;margin-top:8px}
+th,td{padding:9px 8px;text-align:right;border-bottom:1px solid #4a4a4a}
+th{color:var(--gold);font-variant:small-caps;font-weight:normal}
+td:first-child,th:first-child{text-align:left}
+tr.you td{background:rgba(180,154,91,.14);font-weight:bold}
+.flag{background:var(--oxblood);border:1px solid var(--gold);border-radius:8px;padding:12px;margin-top:10px}
+.flag.ok{background:var(--green);border-color:var(--gold)}
+#hist{width:100%;height:280px;display:block;background:#242424;border-radius:8px;border:1px solid #4a4a4a}
+.expl li{margin-bottom:10px}
+.scen{display:flex;justify-content:space-between;align-items:center;background:#242424;
+  border:1px solid #4a4a4a;border-radius:6px;padding:8px 12px;margin:6px 0;font-size:.92rem}
+.scen button{margin-left:6px}
+footer{margin-top:30px;padding:16px;border-top:1px solid #4a4a4a;font-size:.8rem;opacity:.65;text-align:center}
+.small{font-size:.85rem;opacity:.8}
+</style>
+</head>
+<body>
+<header class="brand">
+  <h1>Escalator</h1>
+  <p>Bid-war simulator &middot; write the offer, know the odds</p>
+</header>
+<div class="wrap">
+
+<div class="card">
+  <h2><span class="num">1</span>Your offer</h2>
+  <div class="grid">
+    <div><label>Listing price ($)</label><input type="number" id="listPrice" value="450000" min="1"></div>
+    <div><label>Your base offer ($)</label><input type="number" id="baseOffer" value="450000" min="1">
+      <div class="hint">Where your escalation starts. Usually at or above list in a hot market.</div></div>
+    <div><label>Escalation increment</label>
+      <div class="seg" id="incSeg">
+        <button data-v="500">$500</button><button data-v="1000" class="on">$1,000</button><button data-v="2500">$2,500</button>
+      </div>
+      <input type="number" id="incCustom" placeholder="Custom $" min="1" style="margin-top:8px">
+      <div class="hint">Custom overrides the preset buttons.</div></div>
+    <div><label>Your cap — max you'll pay ($)</label><input type="number" id="cap" value="472500" min="1">
+      <div class="hint">The seller sees this number. Never set it above what you can actually close.</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2><span class="num">2</span>The battlefield</h2>
+  <div class="grid">
+    <div><label>Competing bidders (0–8)</label><input type="number" id="bidders" value="3" min="0" max="8"></div>
+    <div><label>% of competitors using their own escalation clauses</label>
+      <input type="number" id="escPct" value="30" min="0" max="100"></div>
+    <div><label>Market heat</label>
+      <div class="seg" id="heatSeg">
+        <button data-v="cool">Cool</button><button data-v="warm" class="on">Warm</button><button data-v="hot">Hot</button><button data-v="custom">Custom</button>
+      </div>
+      <div class="hint">Cool: bids land −2% to +2% over list &middot; Warm: 0% to +6% &middot; Hot: +2% to +12%</div>
+      <div id="customHeat" style="display:none;margin-top:8px" class="grid">
+        <div><label>Min % over list</label><input type="number" id="cMin" value="0" step="0.5"></div>
+        <div><label>Max % over list</label><input type="number" id="cMax" value="6" step="0.5"></div>
+      </div></div>
+    <div><label>Expected appraised value ($)</label><input type="number" id="appraised" value="450000" min="1"></div>
+    <div><label>Appraisal-gap cash you can cover ($)</label><input type="number" id="gapCash" value="25000" min="0">
+      <div class="hint">Cash above your loan you'll bring if the appraisal comes in low.</div></div>
+  </div>
+</div>
+
+<button class="big" id="runBtn">Run 10,000 bidding wars</button>
+
+<div class="card" id="verdictCard" style="display:none">
+  <h2><span class="num">3</span>The verdict</h2>
+  <span class="bigpct" id="winPct">–</span>
+  <div class="verdict" id="verdictLine"></div>
+  <div>
+    <span class="stat"><span class="k">Avg price when you win</span><span class="v" id="expPrice">–</span></span>
+    <span class="stat"><span class="k">Avg price vs your cap</span><span class="v" id="vsCap">–</span></span>
+  </div>
+  <div class="hint" style="margin-top:10px">Exact ties go to the seller's discretion — assume the other offer takes it.</div>
+</div>
+
+<div class="card" id="histCard" style="display:none">
+  <h2><span class="num">4</span>What you'd pay when you win</h2>
+  <canvas id="hist"></canvas>
+  <div class="hint">Distribution of your final price across winning trials. Dashed gold line = your cap.</div>
+</div>
+
+<div class="card" id="margCard" style="display:none">
+  <h2><span class="num">5</span>What each extra $5,000 of cap buys you</h2>
+  <table id="margTable">
+    <thead><tr><th>Cap</th><th>Win %</th><th>+ pts per $5k</th><th>Avg price if you win</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="hint">Same 10,000 simulated wars re-run at each cap — only your cap moves, so the differences are apples-to-apples.</div>
+</div>
+
+<div class="card" id="gapCard" style="display:none">
+  <h2><span class="num">6</span>Appraisal-gap risk</h2>
+  <div>
+    <span class="stat"><span class="k">P(price beats appraisal)</span><span class="v" id="pGap">–</span></span>
+    <span class="stat"><span class="k">Expected gap</span><span class="v" id="expGap">–</span></span>
+    <span class="stat"><span class="k">Bad-case gap (90th pct)</span><span class="v" id="p90Gap">–</span></span>
+  </div>
+  <div id="gapFlag"></div>
+</div>
+
+<div class="card expl">
+  <h2><span class="num">7</span>How escalation clauses actually work</h2>
+  <ul>
+    <li><b>You name three numbers:</b> your base offer, the increment you escalate by, and your cap. If a bona fide competing offer beats your base, your offer automatically climbs past it by your increment — up to your cap.</li>
+    <li><b>The seller will want proof</b> that the competing offer exists. No phantom bids — your agent should expect the listing agent to ask for documentation.</li>
+    <li><b>Some sellers refuse escalation clauses outright.</b> Ask the listing agent before you write one, or your clever clause dies unread.</li>
+    <li><b>Your cap is visible to the seller.</b> In a thin field, you've just shown them your ceiling. That's the price of the weapon.</li>
+    <li><b>Never escalate past what the house will appraise at</b> unless you have the cash to cover the gap. The bank won't lend on your optimism.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2><span class="num">8</span>Save this scenario</h2>
+  <div class="grid">
+    <div><input type="text" id="scenName" placeholder="Name it — e.g. Elm St, hot market"></div>
+    <div><button class="ghost" id="saveBtn">Save scenario</button>
+      <button class="ghost" id="copyBtn" style="margin-left:8px">Copy summary</button></div>
+  </div>
+  <div id="scenList"></div>
+</div>
+
+<footer>
+  Educational simulation only — not legal, financial, or real-estate advice. Results are statistical estimates from a simplified model, not a guarantee of any outcome. Escalator &middot; a Bull Brew tool.
+</footer>
+</div>
+
+<script>
+'use strict';
+/* ---------- pure math: no DOM in here ---------- */
+var TRIALS = 10000;
+var ESC_INCS = [500, 1000, 2500];
+
+function heatRange(heat, cMin, cMax) {
+  if (heat === 'cool') return [-0.02, 0.02];
+  if (heat === 'hot') return [0.02, 0.12];
+  if (heat === 'custom') return [cMin / 100, cMax / 100];
+  return [0, 0.06]; /* warm */
+}
+
+/* One Monte Carlo run. inputs: {listPrice, inc, cap, bidders, escPct, heat, cMin, cMax, appraised, gapCash}
+   Returns {levels:[{cap,winProb,expPrice}], prices:[your winning prices at your cap], pGap, expGap, p90Gap} */
+function simulate(p) {
+  var range = heatRange(p.heat, p.cMin, p.cMax);
+  var minPct = range[0], maxPct = range[1];
+  var midPct = minPct + (maxPct - minPct) * 0.7;
+  var caps = [p.cap - 10000, p.cap - 5000, p.cap, p.cap + 5000, p.cap + 10000];
+  var winCount = [0, 0, 0, 0, 0];
+  var priceSum = [0, 0, 0, 0, 0];
+  var prices = [];   /* your final price, winning trials at YOUR cap */
+  var gaps = [];     /* appraisal gaps, winning trials at your cap */
+  var i, k, b, H, walk;
+
+  for (i = 0; i < TRIALS; i++) {
+    H = 0; /* highest competing walk-away */
+    for (b = 0; b < p.bidders; b++) {
+      if (Math.random() * 100 < p.escPct) {
+        /* escalating competitor: cap drawn from the upper band */
+        walk = p.listPrice * (1 + midPct + (maxPct - midPct) * Math.random());
+      } else {
+        walk = p.listPrice * (1 + minPct + (maxPct - minPct) * Math.random());
+      }
+      if (walk > H) H = walk;
+    }
+    for (k = 0; k < 5; k++) {
+      if (caps[k] > H) {
+        winCount[k]++;
+        var price = Math.min(caps[k], H + p.inc);
+        priceSum[k] += price;
+        if (k === 2) {
+          prices.push(price);
+          gaps.push(Math.max(0, price - p.appraised));
+        }
+      }
+    }
+  }
+
+  var levels = caps.map(function (c, k) {
+    return {
+      cap: c,
+      winProb: winCount[k] / TRIALS,
+      expPrice: winCount[k] > 0 ? priceSum[k] / winCount[k] : null
+    };
+  });
+
+  var pGap = 0, expGap = 0, p90Gap = 0;
+  if (gaps.length > 0) {
+    var over = 0, s = 0, j;
+    for (j = 0; j < gaps.length; j++) { if (gaps[j] > 0) over++; s += gaps[j]; }
+    pGap = over / gaps.length;
+    expGap = s / gaps.length;
+    var sorted = gaps.slice().sort(function (a, b2) { return a - b2; });
+    p90Gap = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
+  }
+  return { levels: levels, prices: prices, pGap: pGap, expGap: expGap, p90Gap: p90Gap, trials: TRIALS };
+}
+
+/* ---------- everything below touches the DOM ---------- */
+function fmt$(n) {
+  if (n === null || n === undefined || isNaN(n)) return '–';
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
+function $(id) { return document.getElementById(id); }
+
+var state = { heat: 'warm', inc: 1000, last: null, lastInputs: null };
+
+function collectInputs() {
+  var incCustom = parseFloat($('incCustom').value);
+  return {
+    listPrice: parseFloat($('listPrice').value) || 450000,
+    baseOffer: parseFloat($('baseOffer').value) || 450000,
+    inc: (!isNaN(incCustom) && incCustom > 0) ? incCustom : state.inc,
+    cap: parseFloat($('cap').value) || 472500,
+    bidders: Math.max(0, Math.min(8, parseInt($('bidders').value, 10) || 0)),
+    escPct: Math.max(0, Math.min(100, parseFloat($('escPct').value) || 0)),
+    heat: state.heat,
+    cMin: parseFloat($('cMin').value) || 0,
+    cMax: parseFloat($('cMax').value) || 0,
+    appraised: parseFloat($('appraised').value) || 450000,
+    gapCash: Math.max(0, parseFloat($('gapCash').value) || 0)
+  };
+}
+
+function renderVerdict(p, r) {
+  var you = r.levels[2];
+  $('verdictCard').style.display = 'block';
+  $('winPct').textContent = fmtPct(you.winProb);
+  $('verdictLine').innerHTML =
+    'At a <b>' + fmt$(you.cap) + '</b> cap you win <b>' + fmtPct(you.winProb) +
+    '</b> of simulated wars' +
+    (you.expPrice !== null ? ' and pay <b>~' + fmt$(you.expPrice) + '</b> on average when you win.' : ', and when you do win there is no price to average.');
+  $('expPrice').textContent = fmt$(you.expPrice);
+  $('vsCap').textContent = you.expPrice !== null ? fmt$(you.cap - you.expPrice) + ' under cap' : '–';
+}
+
+function renderHist(p, r) {
+  $('histCard').style.display = 'block';
+  var cv = $('hist');
+  var dpr = window.devicePixelRatio || 1;
+  var W = cv.clientWidth || cv.parentElement.clientWidth;
+  var Hh = 280;
+  cv.width = W * dpr; cv.height = Hh * dpr;
+  var ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, Hh);
+  if (r.prices.length === 0) {
+    ctx.fillStyle = '#F5F2E8'; ctx.font = '16px Georgia';
+    ctx.fillText('You never win at this cap — raise it or wait for a cooler market.', 20, 40);
+    return;
+  }
+  var BINS = 20;
+  var lo = Math.min.apply(null, r.prices), hi = Math.max.apply(null, r.prices);
+  if (hi - lo < 1) { hi = lo + 1; }
+  var bins = new Array(BINS).fill(0);
+  r.prices.forEach(function (x) {
+    var b = Math.min(BINS - 1, Math.floor((x - lo) / (hi - lo) * BINS));
+    bins[b]++;
+  });
+  var maxC = Math.max.apply(null, bins);
+  var padL = 8, padR = 8, padT = 24, padB = 34;
+  var plotW = W - padL - padR, plotH = Hh - padT - padB;
+  var bw = plotW / BINS;
+  bins.forEach(function (c, i) {
+    var h = (c / maxC) * plotH;
+    ctx.fillStyle = '#F5F2E8';
+    ctx.fillRect(padL + i * bw + 1, padT + plotH - h, bw - 2, h);
+  });
+  /* cap line */
+  var cx = padL + (p.cap - lo) / (hi - lo) * plotW;
+  if (cx >= padL && cx <= padL + plotW) {
+    ctx.strokeStyle = '#B49A5B'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(cx, padT - 14); ctx.lineTo(cx, padT + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#B49A5B'; ctx.font = '12px Georgia';
+    ctx.fillText('cap ' + fmt$(p.cap), Math.min(cx + 6, W - 110), padT - 2);
+  }
+  ctx.fillStyle = 'rgba(245,242,232,.6)'; ctx.font = '12px Georgia';
+  ctx.fillText(fmt$(lo), padL, Hh - 8);
+  var hiLbl = fmt$(hi);
+  ctx.fillText(hiLbl, W - padR - ctx.measureText(hiLbl).width, Hh - 8);
+  ctx.fillText('your winning price', padL, 16);
+}
+
+function renderMarginal(r) {
+  $('margCard').style.display = 'block';
+  var tb = $('margTable').querySelector('tbody');
+  tb.innerHTML = '';
+  r.levels.forEach(function (L, k) {
+    var tr = document.createElement('tr');
+    if (k === 2) tr.className = 'you';
+    var delta = k === 0 ? '—' : '+' + ((L.winProb - r.levels[k - 1].winProb) * 100).toFixed(1) + ' pts';
+    var lbl = ['−$10k', '−$5k', 'your cap', '+$5k', '+$10k'][k];
+    tr.innerHTML = '<td>' + fmt$(L.cap) + ' <span class="small">' + lbl + '</span></td>' +
+      '<td>' + fmtPct(L.winProb) + '</td><td>' + delta + '</td><td>' + fmt$(L.expPrice) + '</td>';
+    tb.appendChild(tr);
+  });
+}
+
+function renderGap(p, r) {
+  $('gapCard').style.display = 'block';
+  $('pGap').textContent = fmtPct(r.pGap);
+  $('expGap').textContent = fmt$(r.expGap);
+  $('p90Gap').textContent = fmt$(r.p90Gap);
+  var box = $('gapFlag');
+  var shortExp = r.expGap - p.gapCash;
+  var shortBad = r.p90Gap - p.gapCash;
+  if (shortBad > 0) {
+    box.innerHTML = '<div class="flag"><b>Cash warning.</b> In the bad cases you would be <b>' +
+      fmt$(shortBad) + '</b> short of the appraisal gap — and the average gap alone runs ' +
+      fmt$(r.expGap) + ' against your ' + fmt$(p.gapCash) + '. Shrink the cap or bring more cash.</div>';
+  } else if (shortExp > 0) {
+    box.innerHTML = '<div class="flag"><b>Heads up.</b> Your average gap (' + fmt$(r.expGap) +
+      ') already outruns the ' + fmt$(p.gapCash) + ' cash you can cover — you would be <b>' +
+      fmt$(shortExp) + '</b> short on an average win. Shrink the cap or bring more cash.</div>';
+  } else {
+    box.innerHTML = '<div class="flag ok"><b>Gap is covered.</b> Your ' + fmt$(p.gapCash) +
+      ' covers the average gap (' + fmt$(r.expGap) + ') and the 90th-percentile bad case (' +
+      fmt$(r.p90Gap) + ').</div>';
+  }
+}
+
+function run() {
+  var p = collectInputs();
+  var r = simulate(p);
+  state.last = r; state.lastInputs = p;
+  renderVerdict(p, r);
+  renderHist(p, r);
+  renderMarginal(r);
+  renderGap(p, r);
+  window.scrollTo({ top: $('verdictCard').offsetTop - 10, behavior: 'smooth' });
+}
+
+/* ---------- saved scenarios ---------- */
+var LS_KEY = 'escalator.scenarios.v1';
+function loadScens() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveScens(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+function renderScens() {
+  var list = $('scenList'); list.innerHTML = '';
+  loadScens().forEach(function (s, i) {
+    var d = document.createElement('div'); d.className = 'scen';
+    d.innerHTML = '<span><b>' + s.name.replace(/</g, '&lt;') + '</b> — cap ' + fmt$(s.inputs.cap) +
+      ', win ' + fmtPct(s.winProb) + ', avg ' + fmt$(s.expPrice) + '</span>';
+    var del = document.createElement('button'); del.className = 'ghost'; del.textContent = 'Delete';
+    del.onclick = function () { var a = loadScens(); a.splice(i, 1); saveScens(a); renderScens(); };
+    d.appendChild(del); list.appendChild(d);
+  });
+}
+function summaryText() {
+  if (!state.last) return 'Run a simulation first.';
+  var p = state.lastInputs, r = state.last, you = r.levels[2];
+  var lines = ['ESCALATOR — bid-war summary',
+    'List ' + fmt$(p.listPrice) + ' | base ' + fmt$(p.baseOffer) + ' | +' + fmt$(p.inc) + ' steps | cap ' + fmt$(p.cap),
+    p.bidders + ' rivals, ' + p.escPct + '% with their own escalation, market: ' + p.heat,
+    'Win prob ' + fmtPct(you.winProb) + ' — avg price when you win ~' + fmt$(you.expPrice) + '.',
+    'Marginal points per extra $5k cap: ' + r.levels.map(function (L, k) {
+      return k === 0 ? null : '+' + ((L.winProb - r.levels[k - 1].winProb) * 100).toFixed(1);
+    }).filter(Boolean).join(' / ') + '.',
+    'Appraisal risk: P(price > appraisal) ' + fmtPct(r.pGap) + ', expected gap ' + fmt$(r.expGap) +
+      ', bad case ' + fmt$(r.p90Gap) + ' vs cash ' + fmt$(p.gapCash) + '.',
+    'Model: 10,000 Monte Carlo trials. Educational only — not advice.'];
+  return lines.join('\n');
+}
+
+function segWire(id, key) {
+  var el = $(id);
+  el.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      el.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      state[key] = b.getAttribute('data-v');
+      if (key === 'heat') $('customHeat').style.display = state.heat === 'custom' ? 'grid' : 'none';
+    });
+  });
+}
+
+function init() {
+  segWire('incSeg', 'inc');
+  segWire('heatSeg', 'heat');
+  $('runBtn').addEventListener('click', run);
+  $('saveBtn').addEventListener('click', function () {
+    var name = ($('scenName').value || 'Scenario').trim();
+    if (!state.last) { alert('Run the simulation first.'); return; }
+    var a = loadScens();
+    a.push({ name: name, inputs: state.lastInputs, winProb: state.last.levels[2].winProb, expPrice: state.last.levels[2].expPrice });
+    saveScens(a); renderScens(); $('scenName').value = '';
+  });
+  $('copyBtn').addEventListener('click', function () {
+    var t = summaryText();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { alert('Summary copied.'); });
+    } else {
+      var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      alert('Summary copied.');
+    }
+  });
+  renderScens();
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+  run(); /* show defaults on load */
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', init);
+}
+</script>
+</body>
+</html>
